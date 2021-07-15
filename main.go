@@ -6,19 +6,20 @@ import (
 )
 
 func main() {
-	c := make(chan bool)
-	people := [2]string{"Hippo", "koala"}
+	c := make(chan string)
+	people := [5]string{"Hippo", "koala", "Lion", "Tiger", "Python"}
 
 	for _, person := range people {
 		go isGood(person, c)
 	}
-	fmt.Println(<-c)
-	fmt.Println(<-c)
-	// fmt.Println(<-c) // deadlock
+
+	for i := 0; i < len(people); i++ {
+		fmt.Println(<-c)
+	}
 }
 
-func isGood(person string, c chan bool) {
+func isGood(person string, c chan string) {
 	time.Sleep(time.Second * 5)
 	fmt.Println(person)
-	c <- true
+	c <- person + " is good"
 }
