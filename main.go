@@ -9,7 +9,16 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-var baseURL string = "https://kr.indeed.com/jobs?q=python&limit=50"
+type extractedJob struct {
+	id string
+	name string
+	title string
+	location string
+	salary string
+	summary string
+}
+
+var baseURL string = "https://kr.indeed.com/jobs?q=python"
 
 func main() {
 	totalPage := getPages()
@@ -20,8 +29,26 @@ func main() {
 }
 
 func getPage(page int) {
-	pageURL := baseURL + "&start=" + strconv.Itoa(page*50)
+	pageURL := baseURL + "&start=" + strconv.Itoa(page*10)
 	fmt.Println("Requesting", pageURL)
+	res, err := http.Get(pageURL)
+	checkErr(err)
+	checkCode(res)
+
+	defer res.Body.Close()
+
+	doc, err := goquery.NewDocumentFromReader(res.Body)
+	checkErr(err)
+
+	searchCards  := doc.Find(".tapItem")
+
+	searchCards.Each(func(i int, card *goquery.Selection) {
+		id, _ := card.Attr("data-jk")
+		name := card.Find(".companyName").Text()
+		title := card.Find(".jobTitle>span").Text()
+		location := card.Find(".companyLocation").Text()
+		fmt.Println(id, name, title, location)
+	})
 }
 
 func getPages() int {
