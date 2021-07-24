@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -29,10 +31,31 @@ func main() {
 		jobs = append(jobs, extractedJobs...)
 	}
 
-	fmt.Println(jobs)
+	writeJobs(jobs)
+	fmt.Println("Done, extracted", len(jobs))
 }
 
+func writeJobs(jobs []extractedJob) {
+	file, err := os.Create("jobs.csv")
+	checkErr(err)
+
+	w := csv.NewWriter(file)
+	defer w.Flush()
+
+	headers := []string{"link", "Name", "Title", "Location", "Summary"}
+
+	wErr := w.Write(headers)
+	checkErr(wErr)
+
+	for _, job := range jobs {
+		jobSlice := []string{"https://kr.indeed.com/채용보기?" + job.link, job.name, job.title, job.location, job.summary}
+		jwErr := w.Write(jobSlice)
+		checkErr(jwErr)
+	}
+} 
+
 func getPage(page int) (jobs []extractedJob) {
+	c := make(chan extractedJob)
 	pageURL := baseURL + "&start=" + strconv.Itoa(page*10)
 	fmt.Println("Requesting", pageURL)
 	res, err := http.Get(pageURL)
@@ -47,21 +70,31 @@ func getPage(page int) (jobs []extractedJob) {
 	searchCards  := doc.Find(".tapItem")
 
 	searchCards.Each(func(i int, card *goquery.Selection) {
-		job := extractJob(card)
-		jobs = append(jobs, job)
+		go extractJob(card, c)
 	})
+
+	for i:= 0; i < searchCards.Length(); i++ {
+		job := <- c
+		jobs = append(jobs, job)
+	}
 
 	return
 }
 
-func extractJob(card *goquery.Selection) (job extractedJob) {
-	job.link, _ = card.Attr("href")
-	job.name = cleanString(card.Find(".companyName").Text())
-	job.title = cleanString(card.Find(".jobTitle>span").Text())
-	job.location = cleanString(card.Find(".companyLocation").Text())
-	job.summary = cleanString(card.Find(".jobsnippet").Text())
+func extractJob(card *goquery.Selection, c chan<- extractedJob) {
+	link, _ := card.Attr("href")
+	name := cleanString(card.Find(".companyName").Text())
+	title := cleanString(card.Find(".jobTitle>span").Text())
+	location := cleanString(card.Find(".companyLocation").Text())
+	summary := cleanString(card.Find(".jobsnippet").Text())
 
-	return
+	c<- extractedJob{
+		link: link,
+		name : name,
+		title : title,
+		location : location,
+		summary: summary,
+	}
 }
 
 func cleanString(str string) string {
