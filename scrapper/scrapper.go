@@ -10,7 +10,11 @@ import (
 	"strings"
 	"sync"
 
+	// "unicode/utf8"
+
 	"github.com/PuerkitoBio/goquery"
+	// "golang.org/x/text/encoding/korean"
+	// "golang.org/x/text/transform"
 )
 
 type extractedJob struct {
@@ -19,7 +23,10 @@ type extractedJob struct {
 	title string
 	location string
 	summary string
+	salary string
 }
+
+const PageLimit int = 50
 
 // Scrape Indeed by a term 
 func Scrape(term string) {
@@ -28,6 +35,7 @@ func Scrape(term string) {
 
 	c := make(chan []extractedJob)
 	totalPage := getPages(baseURL)
+
 
 	for i:= 0; i< totalPage; i++ {
 		go getPage(i, baseURL, c)
@@ -46,7 +54,7 @@ func Scrape(term string) {
 func getPage(page int, url string , mainC chan<- []extractedJob) {
 	var jobs []extractedJob
 	c := make(chan extractedJob)
-	pageURL := url + "&start=" + strconv.Itoa(page*10)
+	pageURL := url + "&start=" + strconv.Itoa(page * PageLimit)
 	fmt.Println("Requesting", pageURL)
 	res, err := http.Get(pageURL)
 	checkErr(err)
@@ -75,7 +83,8 @@ func extractJob(card *goquery.Selection, c chan<- extractedJob) {
 	name := CleanString(card.Find(".companyName").Text())
 	title := CleanString(card.Find(".jobTitle>span").Text())
 	location := CleanString(card.Find(".companyLocation").Text())
-	summary := CleanString(card.Find(".jobsnippet").Text())
+	summary := CleanString(card.Find(".job-snippet").Text())
+	salary := CleanString(card.Find(".salary-snippet").Text())
 
 	c<- extractedJob{
 		link: link,
@@ -83,6 +92,7 @@ func extractJob(card *goquery.Selection, c chan<- extractedJob) {
 		title : title,
 		location : location,
 		summary: summary,
+		salary : salary,
 	}
 }
 
@@ -94,6 +104,7 @@ func CleanString(str string) string {
 func getPages(url string) int {
 	pages := 0
 	res, err := http.Get(url)
+	fmt.Println(res, err)
 	checkErr(err)
 	checkCode(res)
 
@@ -104,7 +115,34 @@ func getPages(url string) int {
 
 	doc.Find(".pagination").Each(func(i int, s *goquery.Selection) {
 		pages = s.Find("a").Length()
+		fmt.Println(pages)
 	})
+
+	doc.Find("#searchCountPages").Each(func(i int, s *goquery.Selection) {
+		fmt.Println(s.Text())
+		
+		var ss string
+		str := CleanString(s.Text())
+		fmt.Sscanf(str, "1페이지 결과 %s건", &ss)
+
+		ss = strings.Replace(ss, "건", "",1)
+		
+		replacer := strings.NewReplacer("건" , "", "," , "")
+
+		ss = replacer.Replace(ss)
+
+		if page, err := strconv.Atoi(ss) ; err == nil {
+			pages = (page/PageLimit)
+
+		} else {
+			fmt.Println(page, err)
+		}
+	})
+
+	if pages > 10 {
+		pages = 10
+	}
+
 	return pages
 }
 
@@ -145,4 +183,4 @@ func writeJobs(jobs []extractedJob) {
 
 		wait.Wait()
 	}
-} 
+}
